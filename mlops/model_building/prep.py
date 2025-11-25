@@ -1,66 +1,64 @@
-# for data manipulation
 import pandas as pd
-import sklearn
-# for creating a folder
 import os
-# for data preprocessing and pipeline creation
 from sklearn.model_selection import train_test_split
-# for hugging face space authentication to upload files
-from huggingface_hub import login, HfApi
+from huggingface_hub import HfApi
 
-# Define constants for the dataset and output paths
+# Initialize HF API with token
 api = HfApi(token=os.getenv("HF_TOKEN"))
-DATASET_PATH = "hf://datasets/Parthipan00410/Bank-Customer-Churn/bank_customer_churn.csv"
+
+# HuggingFace dataset path
+DATASET_PATH = "hf://datasets/Parthipan00410/Bank-Customer-Churn-Dataset/bank_customer_churn.csv"
+
+# Load dataset
 bank_dataset = pd.read_csv(DATASET_PATH)
 print("Dataset loaded successfully.")
 
-# Define the target variable for the classification task
-target = 'Exited'
+# Target column
+target = "Exited"
 
-# List of numerical features in the dataset
+# Numerical features
 numeric_features = [
-    'CreditScore',       # Customer's credit score
-    'Age',               # Customer's age
-    'Tenure',            # Number of years the customer has been with the bank
-    'Balance',           # Customer’s account balance
-    'NumOfProducts',     # Number of products the customer has with the bank
-    'HasCrCard',         # Whether the customer has a credit card (binary: 0 or 1)
-    'IsActiveMember',    # Whether the customer is an active member (binary: 0 or 1)
-    'EstimatedSalary'    # Customer’s estimated salary
+    "CreditScore",
+    "Age",
+    "Tenure",
+    "Balance",
+    "NumOfProducts",
+    "HasCrCard",
+    "IsActiveMember",
+    "EstimatedSalary"
 ]
 
-# List of categorical features in the dataset
-categorical_features = [
-    'Geography',         # Country where the customer resides
-]
+# Categorical features
+categorical_features = ["Geography"]
 
-# Define predictor matrix (X) using selected numeric and categorical features
+# Feature matrix (X)
 X = bank_dataset[numeric_features + categorical_features]
 
-# Define target variable
+# Target variable (y)
 y = bank_dataset[target]
 
-
-# Split dataset into train and test
-# Split the dataset into training and test sets
+# Train-test split
 Xtrain, Xtest, ytrain, ytest = train_test_split(
-    X, y,              # Predictors (X) and target variable (y)
-    test_size=0.2,     # 20% of the data is reserved for testing
-    random_state=42    # Ensures reproducibility by setting a fixed random seed
+    X, y,
+    test_size=0.2,
+    random_state=42
 )
 
-Xtrain.to_csv("Xtrain.csv",index=False)
-Xtest.to_csv("Xtest.csv",index=False)
-ytrain.to_csv("ytrain.csv",index=False)
-ytest.to_csv("ytest.csv",index=False)
+# Save split datasets
+Xtrain.to_csv("Xtrain.csv", index=False)
+Xtest.to_csv("Xtest.csv", index=False)
+ytrain.to_csv("ytrain.csv", index=False)
+ytest.to_csv("ytest.csv", index=False)
 
+print("Train-test files saved.")
 
-files = ["Xtrain.csv","Xtest.csv","ytrain.csv","ytest.csv"]
+# Upload each file to HuggingFace dataset repo
+files = ["Xtrain.csv", "Xtest.csv", "ytrain.csv", "ytest.csv"]
 
 for file_path in files:
     api.upload_file(
         path_or_fileobj=file_path,
-        path_in_repo=file_path.split("/")[-1],  # just the filename
-        repo_id="Parthipan00410/Bank-Customer-Churn",
+        path_in_repo=os.path.basename(file_path),
+        repo_id="Parthipan00410/Bank-Customer-Churn-Dataset",  # ✅ FIXED
         repo_type="dataset",
     )
