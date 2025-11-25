@@ -1,125 +1,98 @@
-# for data manipulation
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import make_column_transformer
 from sklearn.pipeline import make_pipeline
-# for model training, tuning, and evaluation
 import xgboost as xgb
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import accuracy_score, classification_report, recall_score
-# for model serialization
+from sklearn.metrics import classification_report
 import joblib
-# for creating a folder
 import os
-# for hugging face space authentication to upload files
-from huggingface_hub import login, HfApi, create_repo
-from huggingface_hub.utils import RepositoryNotFoundError, HfHubHTTPError
+from huggingface_hub import HfApi, create_repo
+from huggingface_hub.utils import RepositoryNotFoundError
 
-api = HfApi()
+# HF API
+api = HfApi(token=os.getenv("HF_TOKEN"))
 
-Xtrain_path = "hf://datasets/Parthipan00410/Bank-Customer-Churn/Xtrain.csv"
-Xtest_path = "hf://datasets/Parthipan00410/Bank-Customer-Churn/Xtest.csv"
-ytrain_path = "hf://datasets/Parthipan00410/Bank-Customer-Churn/ytrain.csv"
-ytest_path = "hf://datasets/Parthipan00410/Bank-Customer-Churn/ytest.csv"
+# Dataset paths
+DATA_REPO = "Parthipan00410/Bank-Customer-Churn-Dataset"
 
-Xtrain = pd.read_csv(Xtrain_path)
-Xtest = pd.read_csv(Xtest_path)
-ytrain = pd.read_csv(ytrain_path)
-ytest = pd.read_csv(ytest_path)
+Xtrain = pd.read_csv(f"hf://datasets/{DATA_REPO}/Xtrain.csv")
+Xtest = pd.read_csv(f"hf://datasets/{DATA_REPO}/Xtest.csv")
+ytrain = pd.read_csv(f"hf://datasets/{DATA_REPO}/ytrain.csv")
+ytest = pd.read_csv(f"hf://datasets/{DATA_REPO}/ytest.csv")
 
-
-# List of numerical features in the dataset
+# Feature lists
 numeric_features = [
-    'CreditScore',       # Customer's credit score
-    'Age',               # Customer's age
-    'Tenure',            # Number of years the customer has been with the bank
-    'Balance',           # Customer’s account balance
-    'NumOfProducts',     # Number of products the customer has with the bank
-    'HasCrCard',         # Whether the customer has a credit card (binary: 0 or 1)
-    'IsActiveMember',    # Whether the customer is an active member (binary: 0 or 1)
-    'EstimatedSalary'    # Customer’s estimated salary
+    "CreditScore","Age","Tenure","Balance","NumOfProducts",
+    "HasCrCard","IsActiveMember","EstimatedSalary"
 ]
+categorical_features = ["Geography"]
 
-# List of categorical features in the dataset
-categorical_features = [
-    'Geography',         # Country where the customer resides
-]
-
-
-# Set the clas weight to handle class imbalance
+# Class weight for imbalance
 class_weight = ytrain.value_counts()[0] / ytrain.value_counts()[1]
-class_weight
 
-# Define the preprocessing steps
+# Preprocessing
 preprocessor = make_column_transformer(
     (StandardScaler(), numeric_features),
-    (OneHotEncoder(handle_unknown='ignore'), categorical_features)
+    (OneHotEncoder(handle_unknown="ignore"), categorical_features)
 )
 
-# Define base XGBoost model
-xgb_model = xgb.XGBClassifier(scale_pos_weight=class_weight, random_state=42)
+# XGBoost model
+xgb_model = xgb.XGBClassifier(
+    scale_pos_weight=class_weight,
+    random_state=42
+)
 
-# Define hyperparameter grid
+# Hyperparameter grid
 param_grid = {
-    'xgbclassifier__n_estimators': [50, 75, 100, 125, 150],    # number of tree to build
-    'xgbclassifier__max_depth': [2, 3, 4],    # maximum depth of each tree
-    'xgbclassifier__colsample_bytree': [0.4, 0.5, 0.6],    # percentage of attributes to be considered (randomly) for each tree
-    'xgbclassifier__colsample_bylevel': [0.4, 0.5, 0.6],    # percentage of attributes to be considered (randomly) for each level of a tree
-    'xgbclassifier__learning_rate': [0.01, 0.05, 0.1],    # learning rate
-    'xgbclassifier__reg_lambda': [0.4, 0.5, 0.6],    # L2 regularization factor
+    "xgbclassifier__n_estimators": [50, 100, 150],
+    "xgbclassifier__max_depth": [2, 3, 4],
+    "xgbclassifier__colsample_bytree": [0.4, 0.5, 0.6],
+    "xgbclassifier__colsample_bylevel": [0.4, 0.5, 0.6],
+    "xgbclassifier__learning_rate": [0.01, 0.05, 0.1],
+    "xgbclassifier__reg_lambda": [0.4, 0.5, 0.6],
 }
 
-# Model pipeline
+# Pipeline
 model_pipeline = make_pipeline(preprocessor, xgb_model)
 
-# Hyperparameter tuning with GridSearchCV
+# GridSearch
 grid_search = GridSearchCV(model_pipeline, param_grid, cv=5, n_jobs=-1)
 grid_search.fit(Xtrain, ytrain)
 
-
-# Check the parameters of the best model
-grid_search.best_params_
-
-# Store the best model
 best_model = grid_search.best_estimator_
-best_model
 
-# Set the classification threshold
-classification_threshold = 0.45
+# Predictions
+threshold = 0.45
+train_proba = best_model.predict_proba(Xtrain)[:, 1]
+test_proba = best_model.predict_proba(Xtest)[:, 1]
 
-# Make predictions on the training data
-y_pred_train_proba = best_model.predict_proba(Xtrain)[:, 1]
-y_pred_train = (y_pred_train_proba >= classification_threshold).astype(int)
+train_pred = (train_proba >= threshold).astype(int)
+test_pred = (test_proba >= threshold).astype(int)
 
-# Make predictions on the test data
-y_pred_test_proba = best_model.predict_proba(Xtest)[:, 1]
-y_pred_test = (y_pred_test_proba >= classification_threshold).astype(int)
+print("Train classification report:")
+print(classification_report(ytrain, train_pred))
 
-# Generate a classification report to evaluate model performance on training set
-print(classification_report(ytrain, y_pred_train))
+print("Test classification report:")
+print(classification_report(ytest, test_pred))
 
-# Generate a classification report to evaluate model performance on test set
-print(classification_report(ytest, y_pred_test))
-
-# Save best model
+# Save model
 joblib.dump(best_model, "best_churn_model.joblib")
+print("Model saved.")
 
-# Upload to Hugging Face
-repo_id = "Parthipan00410/Bank-Customer-Churn/churn-model"
+# HF Model Repo
+repo_id = "Parthipan00410/churn-model"
 repo_type = "model"
 
-api = HfApi(token=os.getenv("HF_TOKEN"))
-
-# Step 1: Check if the space exists
+# Create model repo if not exists
 try:
     api.repo_info(repo_id=repo_id, repo_type=repo_type)
-    print(f"Model Space '{repo_id}' already exists. Using it.")
+    print("Model repo exists.")
 except RepositoryNotFoundError:
-    print(f"Model Space '{repo_id}' not found. Creating new space...")
+    print("Model repo not found. Creating...")
     create_repo(repo_id=repo_id, repo_type=repo_type, private=False)
-    print(f"Model Space '{repo_id}' created.")
 
-# create_repo("churn-model", repo_type="model", private=False)
+# Upload model
 api.upload_file(
     path_or_fileobj="best_churn_model.joblib",
     path_in_repo="best_churn_model.joblib",
