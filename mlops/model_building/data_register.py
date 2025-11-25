@@ -1,25 +1,25 @@
-from huggingface_hub.utils import RepositoryNotFoundError, HfHubHTTPError
-from huggingface_hub import HfApi, create_repo
+from huggingface_hub.utils import RepositoryNotFoundError
+from huggingface_hub import HfApi
 import os
 
-
-repo_id = "Parthipan00410/Bank-Customer-Churn"
+repo_id = "Parthipan00410/Bank-Customer-Churn-Dataset"
 repo_type = "dataset"
 
-# Initialize API client
+# Initialize API client with token
 api = HfApi(token=os.getenv("HF_TOKEN"))
 
-# Step 1: Check if the space exists
+# Step 1: Check if the dataset exists
 try:
     api.repo_info(repo_id=repo_id, repo_type=repo_type)
-    print(f"Space '{repo_id}' already exists. Using it.")
+    print(f"Dataset '{repo_id}' already exists. Using it.")
 except RepositoryNotFoundError:
-    print(f"Space '{repo_id}' not found. Creating new space...")
-    create_repo(repo_id=repo_id, repo_type=repo_type, private=False)
-    print(f"Space '{repo_id}' created.")
+    print(f"Dataset '{repo_id}' not found. Creating new dataset...")
+    api.create_repo(repo_id=repo_id, repo_type=repo_type, private=False)
+    print(f"Dataset '{repo_id}' created.")
 
+# Step 2: Upload contents
 api.upload_folder(
-    folder_path="mlops/data",
+    folder_path="mlops/data",   # make sure this path is correct
     repo_id=repo_id,
     repo_type=repo_type,
 )
